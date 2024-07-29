@@ -1,0 +1,88 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Promote Branch
+
+on:
+  push:
+    branches:
+      - develop
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  attestations: write
+  contents: write
+  id-token: write
+  packages: write
+
+jobs:
+  build-containers:
+    name: Build Container
+    strategy:
+      fail-fast: false
+      matrix:
+        context:
+          - containers/cargo-about
+          - containers/cargo-deny
+    uses: ./.github/workflows/docker-build-and-deploy-ghcr.yaml
+    with:
+      dry-run: true
+      context: ${{ matrix.context }}
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
+    secrets: inherit
+
+  promote:
+    name: Promote to Master
+    needs: build-containers
+    runs-on: ubuntu-latest
+
+    environment:
+      name: master-branch
+      url: ${{github.server_url}}/${{github.repository}}/tree/master
+
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PUSH_TOKEN }}
+          fetch-depth: 0
+
+      - name: Push
+        id: update-branch
+        run: |
+          echo "new_sha1=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+
+          git fetch origin master
+          git checkout master
+          echo "old_sha1=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+
+          git push origin ${{github.sha}}:master
+
+      - name: Summarize Success
+        if: success()
+        run: |
+          sha1=$(git rev-parse --short HEAD)
+          echo '# ⏩ Accepted changes from `develop` into `master`'  >> "${GITHUB_STEP_SUMMARY}"
+          echo '' >> "${GITHUB_STEP_SUMMARY}"
+          echo '[${{github.sha}}](${{github.server_url}}/${{github.repository}}/commit/${{github.sha}})' >> "${GITHUB_STEP_SUMMARY}"
+          echo ' is the new HEAD of `master`' >> "${GITHUB_STEP_SUMMARY}"
+          echo ''                                 >> "${GITHUB_STEP_SUMMARY}"
+          echo '## Summary'                       >> "${GITHUB_STEP_SUMMARY}"
+          echo ''                                 >> "${GITHUB_STEP_SUMMARY}"
+          echo 'Below are commits being promoted' >> "${GITHUB_STEP_SUMMARY}"
+          echo ''                                 >> "${GITHUB_STEP_SUMMARY}"
+
+          old_sha1=${{steps.update-branch.outputs.old_sha1}}
+          new_sha1=${{steps.update-branch.outputs.new_sha1}}
+          url_base=${{github.server_url}}/${{github.repository}}/commit/
+          echo "| SHA1 | Message |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "|------|---------|" >> "${GITHUB_STEP_SUMMARY}"
+          git log                                                              \
+            --pretty='format:| [`%h`](${{github.server_url}}/${{github.repository}}/commit/%h) | %s |' \
+            --no-show-signature                                                \
+            ${old_sha1}..${new_sha1} >> "${GITHUB_STEP_SUMMARY}"

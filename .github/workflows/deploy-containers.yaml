@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Build and Deploy Container
+
+on:
+  push:
+    tags:
+      - "v*"
+    branches:
+      - master
+
+permissions:
+  attestations: write
+  contents: read
+  id-token: write
+  packages: write
+
+jobs:
+  deploy-docker-container:
+    name: Deploy Docker Container
+    strategy:
+      fail-fast: false
+      matrix:
+        context:
+          - containers/cargo-about
+          - containers/cargo-deny
+    uses: ./.github/workflows/docker-build-and-deploy-ghcr.yaml
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
+    with:
+      context: ${{ matrix.context }}

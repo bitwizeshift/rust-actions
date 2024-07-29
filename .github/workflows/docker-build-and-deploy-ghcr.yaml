@@ -1,0 +1,147 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Deploy Docker Container (GHCR)
+
+on:
+  workflow_call:
+    inputs:
+      app-id:
+        description: |
+          The ID of the GitHub App to use for authentication.
+          If unspecified, the user will be the actor.
+        required: false
+        type: string
+      app-private-key:
+        description: |
+          The private key of the GitHub App to use for authentication.
+          If unspecified, the password will be the github.token -- and must be
+          a token with packages: write permissions.
+        required: false
+        type: string
+      context:
+        description: |
+          The path to the file context where the dockerfile is located.
+          If unspecified, defaults to .
+        required: false
+        default: .
+        type: string
+      dry-run:
+        description: |
+          If true, the workflow will not push the image to the registry.
+        required: false
+        default: false
+        type: boolean
+    outputs:
+      image-id:
+        description: The name of the image that was built.
+        value: ${{ jobs.deploy.outputs.image-id }}
+      version:
+        description: The version of the image that was built.
+        value: ${{ jobs.deploy.outputs.version }}
+      tagged-image-id:
+        description: The fully qualified image id that was built.
+        value: ${{ jobs.deploy.outputs.tagged-image-id }}
+
+permissions:
+  attestations: write
+  contents: read
+  id-token: write
+  packages: write
+
+jobs:
+  deploy:
+    name: Deploy to Container Registry
+    runs-on: ubuntu-latest
+
+    outputs:
+      image-id: ${{ steps.image.outputs.id }}
+      version: ${{ steps.tag.outputs.version }}
+      tagged-image-id: ${{ steps.image.outputs.id }}:${{ steps.tag.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate GitHub App
+        id: authenticate
+        if: ${{ inputs.app-id && inputs.app-private-key }}
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ inputs.app-id }}
+          private-key: ${{ inputs.app-private-key }}
+
+      - name: Select Token
+        id: select
+        run: |
+          if [[ -n "${{ inputs.app-id }}" && -n "${{ inputs.app-private-key }}" ]]; then
+            echo "token=${{ steps.authenticate.outputs.token }}" >> "${GITHUB_OUTPUT}"
+          else
+            echo "token=${{ github.token }}" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Determine image
+        id: image
+        run: |
+          path=$(cd ${{ inputs.context }} && pwd)
+          image_name=$(basename "${path}")
+          echo "id=ghcr.io/${{ github.repository_owner }}/${image_name}" >> "${GITHUB_OUTPUT}"
+
+      - name: Determine tag
+        id: tag
+        run: |
+          # Extract ref prefix for versions and cut the 'v' prefix
+          if [[ "${{ github.ref }}" == "refs/tags/v"* ]]; then
+            version=$(echo $version | sed -e 's/^v//')
+          elif [[ "${{ github.ref }}" == "refs/heads/${{ github.event.repository.default_branch }}" ]]; then
+            version=latest
+          else
+            version=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+          fi
+
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Login to Registry
+        id: login
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ steps.select.outputs.token }}
+
+      - name: Collect label information
+        id: label
+        run: |
+          echo "url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> "${GITHUB_OUTPUT}"
+          echo "repo=${{ github.event.repository.name }}" >> "${GITHUB_OUTPUT}"
+          echo "owner=${{ github.repository_owner }}" >> "${GITHUB_OUTPUT}"
+          echo "timestamp=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "${GITHUB_OUTPUT}"
+
+      - name: Build and push image
+        id: push
+        uses: docker/build-push-action@v5.0.0
+        with:
+          context: ${{ inputs.context }}
+          push: ${{ !inputs.dry-run }}
+          tags: |
+            ${{ steps.image.outputs.id }}:${{ steps.tag.outputs.version }}
+          labels: |
+            dev.rodusek.run.number=${{ github.run_number }}"
+            dev.rodusek.run.attempt=${{ github.run_attempt }}"
+            dev.rodusek.run.actor=${{ github.actor }}"
+            dev.rodusek.run.event=${{ github.event_name }}"
+            dev.rodusek.run=${{ github.run_id }}"
+            dev.rodusek.source.sha=${{ github.sha }}"
+            dev.rodusek.source.ref=${{ github.ref }}"
+            dev.rodusek.source.repo=${{ steps.label.outputs.repo }}"
+            dev.rodusek.source.owner=${{ steps.label.outputs.owner }}"
+            dev.rodusek.source=${{ steps.label.outputs.url }}"
+            dev.rodusek.build-time=${{ steps.label.outputs.timestamp }}"
+
+      - name: Attest Build Provenance
+        uses: actions/attest-build-provenance@v1
+        id: attest
+        if: ${{ !inputs.dry-run }}
+        with:
+          subject-name: ${{ steps.image.outputs.id }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+          github-token: ${{ github.token }}
