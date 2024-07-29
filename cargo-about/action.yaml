@@ -1,0 +1,38 @@
+name: cargo-about action
+
+description: |
+  Runs the cargo-about tool to generate a summary of the dependencies in a Rust
+  project.
+
+author: Matthew Rodusek (bitwizeshift)
+branding:
+  color: gray-dark
+  icon: package
+
+inputs:
+  template-file:
+    description: |
+      The path to the handlebar template file to use for rendering the output.
+    required: false
+    default: template.md.hbs
+  config:
+    description: |
+      The path to the configuration file for cargo-about.
+    required: false
+    default: ${{ github.workspace }}/about.toml
+  output-file:
+    description: |
+      The path to the output file to write the rendered output to.
+    required: false
+    default: ${{ runner.temp }}/about.md
+
+runs:
+  using: docker
+  image: docker://ghcr.io/bitwizeshift/cargo-about:latest
+  args:
+    - generate
+    - --all-features
+    - --output-file
+    - ${{ inputs.output-file }}
+    - --config
+    - ${{ inputs.template-file }}

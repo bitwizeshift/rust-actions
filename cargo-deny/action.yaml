@@ -1,0 +1,15 @@
+name: cargo-deny action
+
+description: |
+  Runs the cargo-deny tool to block unwanted licenses in a Rust project.
+
+author: Matthew Rodusek (bitwizeshift)
+branding:
+  color: gray-dark
+  icon: briefcase
+
+runs:
+  using: docker
+  image: docker://ghcr.io/bitwizeshift/cargo-deny:latest
+  args:
+    - check
