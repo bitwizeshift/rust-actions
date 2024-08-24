@@ -1,0 +1,20 @@
+name: mdbook action
+
+description: |
+  Generates an mdbook from markdown files in the repository.
+inputs:
+  book-path:
+    description: The path to the mdbook to generate
+    required: false
+    default: "."
+
+author: Matthew Rodusek (bitwizeshift)
+branding:
+  color: gray-dark
+  icon: briefcase
+
+runs:
+  using: docker
+  image: docker://ghcr.io/bitwizeshift/mdbook:latest
+  args:
+    - "${{ inputs.book-path }}"

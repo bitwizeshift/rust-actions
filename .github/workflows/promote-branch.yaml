@@ -26,6 +26,7 @@ jobs:
           - containers/cargo-about
           - containers/cargo-deny
           - containers/cargo-audit
+          - containers/mdbook
     uses: ./.github/workflows/docker-build-and-deploy-ghcr.yaml
     with:
       dry-run: true
