@@ -13,5 +13,6 @@ FROM rust:1-alpine3.20 AS runtime
 
 # cargo-deny requires 'cargo' to be installed.
 COPY --from=build /workspace/.cargo/bin/cargo-deny /cargo-deny
+RUN apk add git --no-cache
 
 ENTRYPOINT ["/cargo-deny"]
