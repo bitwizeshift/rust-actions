@@ -1,0 +1,13 @@
+name: cargo-audit action
+
+description: |
+  Runs the cargo-audit tool.
+
+author: Matthew Rodusek (bitwizeshift)
+branding:
+  color: gray-dark
+  icon: briefcase
+
+runs:
+  using: docker
+  image: docker://ghcr.io/bitwizeshift/cargo-audit:latest

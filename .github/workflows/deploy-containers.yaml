@@ -23,6 +23,7 @@ jobs:
         context:
           - containers/cargo-about
           - containers/cargo-deny
+          - containers/cargo-audit
     uses: ./.github/workflows/docker-build-and-deploy-ghcr.yaml
     permissions:
       attestations: write
