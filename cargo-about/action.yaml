@@ -35,4 +35,5 @@ runs:
     - --output-file
     - ${{ inputs.output-file }}
     - --config
+    - ${{ inputs.config }}
     - ${{ inputs.template-file }}
