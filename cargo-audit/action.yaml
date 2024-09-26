@@ -11,3 +11,5 @@ branding:
 runs:
   using: docker
   image: docker://ghcr.io/bitwizeshift/cargo-audit:latest
+  args:
+    - audit
